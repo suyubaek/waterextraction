@@ -1,39 +1,62 @@
 # WaterExtractDL
 
-#### 介绍
-{**以下是 Gitee 平台说明，您可以替换此简介**
-Gitee 是 OSCHINA 推出的基于 Git 的代码托管平台（同时支持 SVN）。专为开发者提供稳定、高效、安全的云端软件开发协作平台
-无论是个人、团队、或是企业，都能够用 Gitee 实现代码托管、项目管理、协作开发。企业项目请看 [https://gitee.com/enterprises](https://gitee.com/enterprises)}
+## 项目简介
 
-#### 软件架构
-软件架构说明
+WaterExtractDL是一个专注于水体提取的深度学习工具集，提供多种深度学习模型和训练方法，用于从卫星图像、航空照片等遥感数据中准确识别和提取水体区域。
 
+## 项目目标
 
-#### 安装教程
+- 实现多种先进的深度学习模型用于水体提取
+- 提供模型训练、评估和预测的完整流程
+- 支持多源遥感数据的处理和分析
+- 提供易于使用的工具集，降低水体提取任务的技术门槛
 
-1.  xxxx
-2.  xxxx
-3.  xxxx
+## 项目结构
 
-#### 使用说明
+```
+WaterExtractDL/
+├── models/                 # 深度学习模型实现
+│   ├── unet.py             # U-Net模型
+│   ├── deeplabv3.py        # DeepLabV3+模型
+│   └── ...
+├── datasets/               # 数据集加载和预处理
+│   ├── dataset.py          # 数据集类
+│   └── transforms.py       # 数据增强和预处理
+├── train/                  # 训练相关模块
+│   ├── trainer.py          # 训练器
+│   └── losses.py           # 损失函数
+├── utils/                  # 工具函数
+│   ├── metrics.py          # 评估指标
+│   └── visualization.py    # 可视化工具
+├── configs/                # 配置文件
+├── examples/               # 使用示例
+└── tests/                  # 单元测试
+```
 
-1.  xxxx
-2.  xxxx
-3.  xxxx
+## 技术栈
 
-#### 参与贡献
+- Python
+- PyTorch / TensorFlow
+- 遥感图像处理库（如GDAL、Rasterio）
+- 数据分析库（如NumPy、Pandas）
+- 可视化工具（如Matplotlib、Seaborn）
 
-1.  Fork 本仓库
-2.  新建 Feat_xxx 分支
-3.  提交代码
-4.  新建 Pull Request
+## 快速开始
 
+```bash
+# 安装依赖
+pip install -r requirements.txt
 
-#### 特技
+# 训练模型
+python train.py --config configs/default.yaml
 
-1.  使用 Readme\_XXX.md 来支持不同的语言，例如 Readme\_en.md, Readme\_zh.md
-2.  Gitee 官方博客 [blog.gitee.com](https://blog.gitee.com)
-3.  你可以 [https://gitee.com/explore](https://gitee.com/explore) 这个地址来了解 Gitee 上的优秀开源项目
-4.  [GVP](https://gitee.com/gvp) 全称是 Gitee 最有价值开源项目，是综合评定出的优秀开源项目
-5.  Gitee 官方提供的使用手册 [https://gitee.com/help](https://gitee.com/help)
-6.  Gitee 封面人物是一档用来展示 Gitee 会员风采的栏目 [https://gitee.com/gitee-stars/](https://gitee.com/gitee-stars/)
+# 预测示例
+python predict.py --model path/to/model --input path/to/image
+```
+
+## 未来计划
+
+- 支持更多的深度学习模型架构
+- 增加预训练模型库
+- 添加Web界面进行在线预测
+- 支持边缘设备部署
