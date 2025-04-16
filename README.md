@@ -18,6 +18,7 @@ WaterExtractDL/
 ├── models/                 # 深度学习模型实现
 │   ├── unet.py             # U-Net模型
 │   ├── deeplabv3.py        # DeepLabV3+模型
+│   ├── XGBoost.py          # 随机森林模型
 │   └── ...
 ├── datasets/               # 数据集加载和预处理
 │   ├── dataset.py          # 数据集类
