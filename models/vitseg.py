@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 
 class PatchEmbedding(nn.Module):
-    def __init__(self, img_size=512, patch_size=16, in_ch=3, embed_dim=768):
+    def __init__(self, img_size=512, patch_size=16, in_ch=4, embed_dim=768):  # in_ch=4
         super().__init__()
         self.img_size = img_size
         self.patch_size = patch_size
@@ -32,7 +32,7 @@ class TransformerEncoderLayer(nn.Module):
         return x
 
 class ViTEncoder(nn.Module):
-    def __init__(self, img_size=512, patch_size=16, in_ch=3, embed_dim=768, depth=12, num_heads=12):
+    def __init__(self, img_size=512, patch_size=16, in_ch=4, embed_dim=768, depth=12, num_heads=12):  # in_ch=4
         super().__init__()
         self.patch_embed = PatchEmbedding(img_size, patch_size, in_ch, embed_dim)
         self.n_patches = (img_size // patch_size) ** 2
@@ -53,7 +53,7 @@ class UpBlock(nn.Module):
         super().__init__()
         self.up = nn.ConvTranspose2d(in_ch, out_ch, kernel_size=2, stride=2)
         self.conv = nn.Sequential(
-            nn.Conv2d(out_ch, out_ch, 3, padding=1),  # 注意这里改为 out_ch
+            nn.Conv2d(out_ch, out_ch, 3, padding=1),
             nn.BatchNorm2d(out_ch),
             nn.ReLU(inplace=True),
             nn.Conv2d(out_ch, out_ch, 3, padding=1),
@@ -62,18 +62,17 @@ class UpBlock(nn.Module):
         )
     def forward(self, x, skip=None):
         x = self.up(x)
-        # 如果skip为None，直接用x
         if skip is not None and skip.shape[2:] == x.shape[2:]:
             x = torch.cat([x, skip], dim=1)
         return self.conv(x)
 
-class ViT_UNet(nn.Module):
+class ViTseg(nn.Module):
     def __init__(self, img_size=512, num_classes=1, patch_size=16, embed_dim=768, depth=8, num_heads=8):
         super().__init__()
         self.img_size = img_size
         self.patch_size = patch_size
         self.n_patches = (img_size // patch_size) ** 2
-        self.encoder = ViTEncoder(img_size, patch_size, 3, embed_dim, depth, num_heads)
+        self.encoder = ViTEncoder(img_size, patch_size, 4, embed_dim, depth, num_heads)  # in_ch=4
         self.encoder_out_ch = embed_dim
         self.decoder_chs = [512, 256, 128, 64]
 
@@ -87,11 +86,10 @@ class ViT_UNet(nn.Module):
         b = x.shape[0]
         x_patch = self.encoder(x)
         x = x_patch.transpose(1, 2).reshape(b, self.encoder_out_ch, self.img_size // self.patch_size, self.img_size // self.patch_size)
-        # 不用skip
-        x = self.up1(x)  # (b, 512, 64, 64)
-        x = self.up2(x)  # (b, 256, 128, 128)
-        x = self.up3(x)  # (b, 128, 256, 256)
-        x = self.up4(x)  # (b, 64, 512, 512)
+        x = self.up1(x)
+        x = self.up2(x)
+        x = self.up3(x)
+        x = self.up4(x)
         x = self.final_conv(x)
         x = torch.sigmoid(x)
         return x
