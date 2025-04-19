@@ -2,6 +2,7 @@ import sys
 import os
 import random
 import numpy as np
+import logging
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 import torch
 import torch.nn as nn
@@ -68,14 +69,32 @@ def plot_and_save(train_losses, test_losses, train_ious, test_ious, save_path):
     plt.savefig(save_path)
     plt.close()
 
-def main():
-    set_seed(42)
+def setup_logger(log_path):
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s %(levelname)s: %(message)s',
+        handlers=[
+            logging.FileHandler(log_path, mode='w'),
+            logging.StreamHandler()
+        ]
+    )
+
+def run_training(seed, run_idx):
+    set_seed(seed)
+    os.makedirs("data", exist_ok=True)
+    log_file = f"data/train_seed_{seed}_run_{run_idx}.log"
+    curve_file = f"data/loss_iou_curve_seed_{seed}_run_{run_idx}.png"
+    # 重新设置logger，避免多次调用basicConfig无效
+    for handler in logging.root.handlers[:]:
+        logging.root.removeHandler(handler)
+    setup_logger(log_file)
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     folder = "/d/chenhongxian/traingf2"
     train_loader, test_loader = get_loaders(folder, batch_size=8, img_size=256, shuffle=True, num_workers=2)
     model = ViTseg().to(device)
     criterion = nn.BCELoss()
     optimizer = optim.Adam(model.parameters(), lr=1e-4)
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=10, verbose=True)
 
     train_losses, test_losses, train_ious, test_ious = [], [], [], []
     for epoch in range(1, 101):
@@ -85,11 +104,13 @@ def main():
         test_losses.append(test_loss)
         train_ious.append(train_iou)
         test_ious.append(test_iou)
-        print(f"Epoch {epoch}: Train Loss={train_loss:.4f}, Train IoU={train_iou:.4f} | Test Loss={test_loss:.4f}, Test IoU={test_iou:.4f}")
+        scheduler.step(test_loss)
+        logging.info(f"Epoch {epoch}: Train Loss={train_loss:.4f}, Train IoU={train_iou:.4f} | Test Loss={test_loss:.4f}, Test IoU={test_iou:.4f} | LR={optimizer.param_groups[0]['lr']:.6f}")
 
-    # 保存曲线
-    os.makedirs("../data", exist_ok=True)
-    plot_and_save(train_losses, test_losses, train_ious, test_ious, "../data/loss_iou_curve.png")
+    plot_and_save(train_losses, test_losses, train_ious, test_ious, curve_file)
 
 if __name__ == "__main__":
-    main()
+    seeds = random.sample(range(1, 101), 30)
+    for idx, seed in enumerate(seeds):
+        print(f"Run {idx+1}/30, Seed={seed}")
+        run_training(seed, idx+1)
