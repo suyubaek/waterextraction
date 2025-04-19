@@ -13,8 +13,11 @@ from utils.dataloading import SegmentationDataset, NpySegmentationDataset
 from utils.model_eval import calculate_accuracy, calculate_iou, validate_model
 from models.U_net import UNet
 import numpy as np
+from configs.paths import DATASET_DIR, PRETRAINED_MODEL_DIR
+from configs.trainconfig  import TrainConfig
+import argparse
 # Define paths
-data_path = "E:\Thesis2025\SWED\SWED\\train"
+data_path = DATASET_DIR
 
 # Define transformations
 transform = transforms.Compose([
@@ -36,9 +39,9 @@ def train_model(
     in_channels:int=3,
     out_channels:int=1,
 ):
-    image_dir = os.path.join(data_path, "images")
-    mask_dir = os.path.join(data_path, "masks")
-    output_dir = os.path.join(data_path, "output")
+    image_dir = os.path.join(data_path, "GFimages")
+    mask_dir = os.path.join(data_path, "GFmasks")
+    output_dir = os.path.join(data_path, "GFoutput")
     os.makedirs(output_dir, exist_ok=True) 
     # Load dataset
 
@@ -172,8 +175,8 @@ def train_model_npy(
     in_channels:int=3,
     out_channels:int=1,
 ):
-    image_dir = os.path.join(data_path, "filter_images")
-    mask_dir = os.path.join(data_path, "binary_filter_masks")
+    image_dir = os.path.join(data_path, "images")
+    mask_dir = os.path.join(data_path, "masks")
     output_dir = os.path.join(data_path, "output")
     os.makedirs(output_dir, exist_ok=True) 
     # Load dataset
@@ -471,17 +474,33 @@ if __name__ == "__main__":
     # Define model parameters
     in_channels = 3  # Number of input channels (e.g., RGB image)
     out_channels = 1  # Number of output channels (e.g., binary segmentation)
+    model = UNet(in_channels=3, out_channels=1) 
+    # 初始化参数解析器
+    parser = argparse.ArgumentParser(description="训练 U-Net 模型")
 
+    # 添加命令行参数（覆盖默认值）
+    parser.add_argument("--epochs", type=int, default=TrainConfig.EPOCHS, help="训练轮数")
+    parser.add_argument("--batchsize", type=int, default=TrainConfig.BATCH_SIZE, help="批次大小")
+    parser.add_argument("--lr", type=float, default=TrainConfig.LEARNING_RATE, help="学习率")
+    parser.add_argument("--startepoch", type=int, default=TrainConfig.START_EPOCH, help="开始训练的轮数")
+    parser.add_argument("--val_percent", type=float, default=TrainConfig.VAL_PERCENT, help="验证集比例")
+
+    # 解析参数
+    args = parser.parse_args()
+    history_save_path_gf=os.path.join(data_path, "GFoutput")
+    train_model(data_path,model, device, args.epochs,args.batchsize, args.lr, args.val_percent, args.startepoch, history_save_path_gf, in_channels, out_channels)
     # Define paths for saving history
-    history_save_path = os.path.join(data_path, "output", "unet_model_finetuned.pth")
+    #history_save_path = os.path.join(data_path, "output", "unet_model.pth")
+    history_save_path_s2= os.path.join(data_path, "S2output")
     
     # Train the model
     # 加载预训练模型
-    #pretrained_model_path = "E:\Thesis2025\\all_clip_256\\filter2560\output\\unet_model_best.pth\\best_model.pth"#"D:\学术相关\毕设参考\Pytorch-UNet-master\my-unet\\best_model_pixel2560.pth"  # 替换为你的预训练模型路径
-   #checkpointpath="E:\Thesis2025\\all_clip_256\\filter2560\\output\\unet_model_finetuned.pth\\checkpoint_epoch_50.pth"
+    pretrained_model_path =PRETRAINED_MODEL_DIR  # 替换为你的预训练模型路径
+    #"D:\学术相关\毕设参考\Pytorch-UNet-master\my-unet\\best_model_pixel2560.pth"  # 替换为你的预训练模型路径
+    #checkpointpath="E:\Thesis2025\\all_clip_256\\filter2560\\output\\unet_model_finetuned.pth\\checkpoint_epoch_50.pth"
     #checkpointpath="E:\Thesis2025\\all_clip_256\\filter2560\\output\\unet_model_finetuned.pth\\best_model.pth"
-    pretrained_model_path = "E:\\Thesis2025\\SWED\\SWED\\train\\output\\unet_model_finetuned.pth\\checkpoint_epoch_23.pth"
-    model = UNet(in_channels=3, out_channels=1)  # 假设输入为3通道，输出为1通道（如二分类任务）
+    #pretrained_model_path = "E:\\Thesis2025\\SWED\\SWED\\train\\output\\unet_model_finetuned.pth\\checkpoint_epoch_23.pth"
+    #model = UNet(in_channels=3, out_channels=1)  # 假设输入为3通道，输出为1通道（如二分类任务）
     model, loaded,checkpoint = load_model_if_exists(model,  pretrained_model_path , device)
 
     if loaded:
@@ -498,9 +517,6 @@ if __name__ == "__main__":
     optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=5e-06)
 
    
-    
-   
-  
     # 微调模型
     
     
@@ -526,7 +542,7 @@ if __name__ == "__main__":
     # history_save_path:str="",
     # in_channels:int=3,
     # out_channels:int=1,
-    train_model_npy(data_path,model, device, 12, 8, 5e-6, 0.2, 23, history_save_path, in_channels, out_channels)
+    train_model_npy(data_path,model, device, 12, 8, 5e-6, 0.2, 0, history_save_path_s2, in_channels, out_channels)
 
     # Unfreeze the decoder layers for the remaining epochs
     print("Unfreezing decoder layers for further training.")
@@ -540,8 +556,8 @@ if __name__ == "__main__":
         param.requires_grad = True
 
     # Train for the remaining epochs with unfrozen decoder
-    train_model_npy(data_path,model, device, 30, 8, 1e-6, 0.2, 35, history_save_path, in_channels, out_channels)
+    train_model_npy(data_path,model, device, 30, 8, 1e-6, 0.2, 35, history_save_path_s2, in_channels, out_channels)
 
     # Combine the training history
-    print("Training completed. Combining training history.")
+    print("Training completed.")
 
