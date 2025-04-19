@@ -1,22 +1,15 @@
+import sys
 import os
-import cv2
-import numpy as np
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-folder = '/Users/songyufei1/Documents/look_code_syf/water-extract-dl/data/water_seg'  # 替换为你的文件夹路径
+from datasets.waterseg_dataset import get_loader
 
-for fname in os.listdir(folder):
-    if fname.lower().endswith('.png'):
-        img_path = os.path.join(folder, fname)
-        img = cv2.imread(img_path, cv2.IMREAD_UNCHANGED)
-        if img is None:
-            print(f"{fname}: 图像读取失败")
-            continue
-        # 检查像素是否全为0
-        if np.all(img == 0):
-            print(f"{fname}: 全为0，删除该png及同名tif")
-            os.remove(img_path)
-            tif_name = os.path.splitext(fname)[0] + '.tif'
-            tif_path = os.path.join(folder, tif_name)
-            if os.path.exists(tif_path):
-                os.remove(tif_path)
-                print(f"{tif_name}: 已删除")
+if __name__ == "__main__":
+    root_dir = "/d/chenhongxian/traingf2"  # 替换为你的数据集根目录
+    loader = get_loader(root_dir, batch_size=2, img_size=256, shuffle=True, num_workers=0)
+    for i, (imgs, masks) in enumerate(loader):
+        print(f"Batch {i}:")
+        print("  imgs.shape:", imgs.shape)
+        print("  masks.shape:", masks.shape)
+        if i == 2:  # 只查看前3个batch
+            break

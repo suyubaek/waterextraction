@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 
 class PatchEmbedding(nn.Module):
-    def __init__(self, img_size=512, patch_size=16, in_ch=4, embed_dim=768):  # in_ch=4
+    def __init__(self, img_size=256, patch_size=16, in_ch=3, embed_dim=256):  # in_ch=3, embed_dim适当减小
         super().__init__()
         self.img_size = img_size
         self.patch_size = patch_size
@@ -32,7 +32,7 @@ class TransformerEncoderLayer(nn.Module):
         return x
 
 class ViTEncoder(nn.Module):
-    def __init__(self, img_size=512, patch_size=16, in_ch=4, embed_dim=768, depth=12, num_heads=12):  # in_ch=4
+    def __init__(self, img_size=256, patch_size=16, in_ch=3, embed_dim=256, depth=4, num_heads=4):  # embed_dim/heads适当减小
         super().__init__()
         self.patch_embed = PatchEmbedding(img_size, patch_size, in_ch, embed_dim)
         self.n_patches = (img_size // patch_size) ** 2
@@ -67,20 +67,20 @@ class UpBlock(nn.Module):
         return self.conv(x)
 
 class ViTseg(nn.Module):
-    def __init__(self, img_size=512, num_classes=1, patch_size=16, embed_dim=768, depth=8, num_heads=8):
+    def __init__(self, img_size=256, num_classes=1, patch_size=16, embed_dim=256, depth=4, num_heads=4):
         super().__init__()
         self.img_size = img_size
         self.patch_size = patch_size
         self.n_patches = (img_size // patch_size) ** 2
-        self.encoder = ViTEncoder(img_size, patch_size, 4, embed_dim, depth, num_heads)  # in_ch=4
+        self.encoder = ViTEncoder(img_size, patch_size, 3, embed_dim, depth, num_heads)  # in_ch=3
         self.encoder_out_ch = embed_dim
-        self.decoder_chs = [512, 256, 128, 64]
+        self.decoder_chs = [128, 64, 32, 16]
 
-        self.up1 = UpBlock(embed_dim, 512)
-        self.up2 = UpBlock(512, 256)
-        self.up3 = UpBlock(256, 128)
-        self.up4 = UpBlock(128, 64)
-        self.final_conv = nn.Conv2d(64, num_classes, 1)
+        self.up1 = UpBlock(embed_dim, 128)
+        self.up2 = UpBlock(128, 64)
+        self.up3 = UpBlock(64, 32)
+        self.up4 = UpBlock(32, 16)
+        self.final_conv = nn.Conv2d(16, num_classes, 1)
 
     def forward(self, x):
         b = x.shape[0]
