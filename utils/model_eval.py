@@ -3,6 +3,27 @@ import numpy as np
 import torch
 from sklearn.metrics import confusion_matrix
 from tqdm import tqdm
+
+#模型的预测函数
+def predict(image, model, device):
+    """
+    Perform prediction using the given model and input image.
+
+    Args:
+        image (torch.Tensor): Input image tensor with shape (1, C, H, W).
+        model (nn.Module): Trained model.
+        device (torch.device): Device to run the model on.
+
+    Returns:
+        np.ndarray: Predicted binary mask as a NumPy array.
+    """
+    model.eval()
+    with torch.no_grad():
+        image = image.to(device)
+        output = model(image)
+        prediction = torch.sigmoid(output).squeeze().cpu().numpy()
+    return prediction
+
 def calculate_iou(pred_mask, true_mask, threshold=0.5):
     """
     Calculate Intersection over Union (IoU) metric.
@@ -33,6 +54,7 @@ def calculate_iou(pred_mask, true_mask, threshold=0.5):
     if union == 0:
         return 1.0 if intersection == 0 else 0.0
     return intersection / union
+
 def calculate_accuracy(pred_mask, true_mask, threshold=0.5):
     """
     Calculate pixel-wise accuracy.
@@ -60,6 +82,7 @@ def calculate_accuracy(pred_mask, true_mask, threshold=0.5):
     total = pred_mask.size
     
     return correct / total
+
 def calculate_metrics_from_confusion_matrix(pred_mask, true_mask, threshold=0.5):
     """
     Calculate recall, precision, and F1 score using confusion matrix.
@@ -91,6 +114,7 @@ def calculate_metrics_from_confusion_matrix(pred_mask, true_mask, threshold=0.5)
     f1_score = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0.0
     
     return recall, precision, f1_score
+
 #模型训练后的验证函数
 def validate_model(model, val_loader, criterion, device):
     """

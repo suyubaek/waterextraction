@@ -4,9 +4,8 @@ from PIL import Image
 import numpy as np
 import matplotlib.pyplot as plt
 import os
-
-from U_net_v2 import UNet, calculate_iou
-from Unet import predict
+from models.U_net import UNet
+from utils.model_eval import predict, calculate_iou
 
 def predict_folder(folder_path, model, device, transform, output_folder):
     if not os.path.exists(output_folder):
@@ -47,13 +46,6 @@ def predict_folder(folder_path, model, device, transform, output_folder):
     else:
         print("No IoU values calculated.")
 
-def predict_binary(image, model, device, threshold=0.9):
-    model.eval()
-    with torch.no_grad():
-        image = image.to(device)
-        output = model(image)
-        prediction = (torch.sigmoid(output) > threshold).float().squeeze().cpu().numpy()
-    return prediction
 def load_checkpoint(filepath, map_location):
     """
     Load a checkpoint without file locking.
@@ -111,11 +103,12 @@ if __name__ == "__main__":
     user_home = os.path.expanduser("~")  # Get user's home directory
     #path=os.path.join(user_home, "unet_output","best_model_pixel2560.pth")
    # path="E:\Thesis2025\\all_clip_256\\filter2560\\output\\unet_model_finetuned.pth\\best_model.pth"
-    path="E:\\Thesis2025\\SWED\\SWED\\train\\output\\unet_model_finetuned.pth\\best_model.pth"
+    #path="E:\\Thesis2025\\SWED\\SWED\\train\\output\\unet_model_finetuned.pth\\best_model.pth"
     #path="E:\Thesis2025\\all_clip_256\\filter2560\\output\\unet_model_finetuned.pth\\best_model_frozen.pth"
     #path="E:\\Thesis2025\\all_clip_256\\best_model_pixel2560.pth"
     #path="E:\Thesis2025\\all_clip_256\\filter2560\\output\\unet_model_best.pth\\best_model.pth"
     #path="E:\\Thesis2025\\all_clip_256\\filter2560\\output\\unet_model_best.pth\\best_model.pth"
+    path="E:\\Thesis2025\\autodl\\best_model.pth"  #从autodl上训练的模型 逐层解冻的模型
     model,loaded=load_model_if_exists(model, path, device)
     model.to(device)
     model.eval()
@@ -139,12 +132,14 @@ if __name__ == "__main__":
             image = Image.open(file_path).convert('RGB')
             input_image = transform(image).unsqueeze(0).to(device)
             prediction = predict(input_image, model, device)
+            # Save the prediction array as a .npy file
+            prediction_array_path = os.path.join(output_folder, f"pred_array_{os.path.splitext(filename)[0]}.npy")
+            np.save(prediction_array_path, prediction)
             #生成的预测图得调整一下
-            threshold = 0.5  # Set the threshold
+            threshold = 0.8  # Set the threshold
             prediction = (prediction > threshold).astype(np.uint8)  # Convert to binary image
             prediction_image = Image.fromarray((prediction * 255).astype('uint8'))
-
-            output_path = os.path.join(output_folder, f"pred_trans1_{filename}")
+            output_path = os.path.join(output_folder, f"pred_trans_{filename}")
             prediction_image.save(output_path)
 
     print("Prediction completed. Results saved to output folder.")
