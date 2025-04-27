@@ -33,11 +33,11 @@ def show_image_with_probability(original_image,image, probability_map):
 # 示例用法
 if __name__ == "__main__":
     # 创建一个随机图片和概率图
-    original_image_path = "E:\\imagedata\\2305-06\\clipped_images\\test\\s2_20230506_enhanced_image_13312_4608.tif"
+    original_image_path = "E:\imagedata\\2305-06\clipped_images\images\s2_20230506_enhanced_image_0_2816.tif"
     original_image = Image.open(original_image_path)  # 随机 RGB 图片
-    image_path="E:\\imagedata\\2305-06\\clipped_images\\prediction\\pred_trans_s2_20230506_enhanced_image_13312_4608.tif"
-    image = Image.open(image_path)  # 随机 RGB 图片
-    pred_array_path = "E:\\imagedata\\2305-06\\clipped_images\\prediction\\pred_array_s2_20230506_enhanced_image_13312_4608.npy"
+    image_path="E:\imagedata\\2305-06\clipped_images\prediction\\trans_s2_20230506_enhanced_image_0_2816.tif"
+    image = Image.open(image_path)  # 随机 RGB 图片20250420_214636_pred_array_s2
+    pred_array_path = "E:\\imagedata\\2305-06\\clipped_images\\prediction\\array_s2_20230506_enhanced_image_0_2816.npy"
     probability_map = np.load(pred_array_path)# 随机概率图
 
     show_image_with_probability(original_image,image, probability_map)

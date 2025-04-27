@@ -3,7 +3,9 @@ import numpy as np
 import torch
 from sklearn.metrics import confusion_matrix
 from tqdm import tqdm
-
+import os
+import matplotlib.pyplot as plt
+from PIL import Image
 #模型的预测函数
 def predict(image, model, device):
     """
@@ -23,6 +25,30 @@ def predict(image, model, device):
         output = model(image)
         prediction = torch.sigmoid(output).squeeze().cpu().numpy()
     return prediction
+
+
+def predict_folder(input_folder, model, device, transform, output_folder):
+    if not os.path.exists(output_folder):
+        os.makedirs(output_folder)
+
+    file_list = [f for f in os.listdir(input_folder) if os.path.isfile(os.path.join(input_folder, f)) and f.lower().endswith(('.png', '.jpg', '.jpeg', '.tif', '.bmp'))]
+    for filename in tqdm(file_list, desc="Processing images"):
+        file_path = os.path.join(input_folder, filename)
+        if os.path.isfile(file_path) and filename.lower().endswith(('.png', '.jpg', '.jpeg', '.tif', '.bmp')):
+            image = Image.open(file_path).convert('RGB')
+            input_image = transform(image).unsqueeze(0).to(device)
+            prediction = predict(input_image, model, device)
+            # Save the prediction array as a .npy file
+            prediction_array_path = os.path.join(output_folder, f"array_{os.path.splitext(filename)[0]}.npy")
+            np.save(prediction_array_path, prediction)
+            #生成的预测图得调整一下
+            threshold = 0.722  # Set the threshold,后面可以优化阈值
+            prediction = (prediction > threshold).astype(np.uint8)  # Convert to binary image
+            prediction_image = Image.fromarray((prediction * 255).astype('uint8'))
+            output_path = os.path.join(output_folder, f"trans_{filename}")
+            prediction_image.save(output_path)
+
+    print("Prediction completed. Results saved to output folder.")
 
 def calculate_iou(pred_mask, true_mask, threshold=0.5):
     """
@@ -182,3 +208,105 @@ def validate_model(model, val_loader, criterion, device):
 
     
     return val_loss, val_accuracy, val_iou, val_precision, val_recall, val_f1
+
+
+#从验证集上挑选出一些样本进行可视化
+def visualize_predictions(model, dataset, device, num_samples=3, save_path=None):
+    """
+    Visualize model predictions on a few samples.
+    
+    Args:
+        model (nn.Module): Trained model
+        dataset (Dataset): Dataset to sample from
+        device (torch.device): Device to run the model on
+        num_samples (int): Number of samples to visualize
+        save_path (str, optional): Path to save the visualization
+    """
+    # Get a few random samples
+    indices = [674, 520, 611]
+    plt.figure(figsize=(15, 5 * num_samples))
+    
+    for i, idx in enumerate(indices):
+        image, mask = dataset[idx]
+        
+        # Make prediction
+        pred = torch.sigmoid(model(image.unsqueeze(0).to(device))).squeeze().detach().cpu().numpy()
+        
+        # Denormalize image if needed
+        if isinstance(image, torch.Tensor):
+            # Assuming normalization with ImageNet mean and std
+            image = image.cpu().numpy().transpose(1, 2, 0)
+            image = image * np.array([0.229, 0.224, 0.225]) + np.array([0.485, 0.456, 0.406])
+            image = np.clip(image, 0, 1)
+        
+        # Convert mask to numpy array if needed
+        if isinstance(mask, torch.Tensor):
+            mask = mask.squeeze().cpu().numpy()
+        
+        # Calculate IoU
+        iou = calculate_iou(pred, mask)
+        
+        # Plot image, ground truth, and prediction
+        plt.subplot(num_samples, 3, i * 3 + 1)
+        plt.imshow(image)
+        plt.title(f"Sample {idx}")
+        plt.axis('off')
+        
+        plt.subplot(num_samples, 3, i * 3 + 2)
+        plt.imshow(mask, cmap='gray')
+        plt.title("Ground Truth")
+        plt.axis('off')
+        
+        plt.subplot(num_samples, 3, i * 3 + 3)
+        plt.imshow(pred, cmap='gray')
+        plt.title(f"Prediction (IoU: {iou:.4f})")
+        plt.axis('off')
+    
+    plt.tight_layout()
+    
+    if save_path:
+        plt.savefig(save_path)
+    
+    plt.show()
+
+# -------------------------------
+# Model Checkpoint Functions
+# -------------------------------
+def load_checkpoint(filepath, map_location):
+    """
+    Load a checkpoint without file locking.
+    
+    Args:
+        filepath (str): Path to the checkpoint.
+        map_location (torch.device): Device to map the checkpoint.
+        
+    Returns:
+        dict: Loaded checkpoint state.
+    """
+    try:
+        checkpoint = torch.load(filepath, map_location=map_location)
+        print(f"Checkpoint loaded from {filepath}")
+        return checkpoint
+    except Exception as e:
+        print(f"Error loading checkpoint from {filepath}: {str(e)}")
+        return None
+
+def load_model_if_exists(model, model_path, device):
+    try:
+        if os.path.exists(model_path):
+            print(f"Loading model from {model_path}")
+            checkpoint = load_checkpoint(model_path, map_location=device)
+            if checkpoint:
+                model = model.to(device)  # Ensure model is on device before loading weights
+                model.load_state_dict(checkpoint['model_state_dict'])
+                print(f"Model loaded successfully (epoch {checkpoint.get('epoch', 'unknown')})")
+                return model, True, checkpoint  # Return checkpoint as well
+            else:
+                print(f"Failed to load model from {model_path}")
+                return model, False, None
+        else:
+            print(f"No model found at {model_path}")
+            return model, False, None
+    except Exception as e:
+        print(f"Error loading model: {str(e)}")
+        return model, False, None

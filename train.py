@@ -10,14 +10,14 @@ import torch.nn as nn
 import torch.optim as optim
 import matplotlib.pyplot as plt
 from utils.dataloading import SegmentationDataset, NpySegmentationDataset
-from utils.model_eval import calculate_accuracy, calculate_iou, validate_model
-from models.U_net import UNet
+from utils.model_eval import calculate_accuracy, calculate_iou, validate_model, load_checkpoint
+from models.CBAM_U_net import UNet_CBAM, FocalLoss
 import numpy as np
 from configs.paths import DATASET_DIR, PRETRAINED_MODEL_DIR
 from configs.trainconfig  import TrainConfig
 import argparse
 # Define paths
-data_path = DATASET_DIR
+data_path = "E:\Thesis2025\\all_clip_256\\filter0585"
 
 # Define transformations
 transform = transforms.Compose([
@@ -39,8 +39,8 @@ def train_model(
     in_channels:int=3,
     out_channels:int=1,
 ):
-    image_dir = os.path.join(data_path, "GFimages")
-    mask_dir = os.path.join(data_path, "GFmasks")
+    image_dir = os.path.join(data_path, "images")
+    mask_dir = os.path.join(data_path, "masks")
     output_dir = os.path.join(data_path, "GFoutput")
     os.makedirs(output_dir, exist_ok=True) 
     # Load dataset
@@ -53,8 +53,8 @@ def train_model(
     val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=4)
 
     # Define optimizer and loss function
-    model = UNet(in_channels=in_channels, out_channels=out_channels)
-    criterion = nn.BCEWithLogitsLoss()
+    model = UNet_CBAM(in_channels=in_channels, out_channels=out_channels)
+    criterion = FocalLoss(alpha=0.25, gamma=2)
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 
     
@@ -140,16 +140,16 @@ def train_model(
         history['val_f1'].append(val_f1)
         
         # Save the model for the current epoch
-        epoch_save_path = os.path.join(history_save_path, f"checkpoint_epoch_{epoch+1}.pth")
-        os.makedirs(os.path.dirname(epoch_save_path), exist_ok=True)  # Ensure directory exists
-        torch.save({
-            'epoch': epoch + 1,
-            'model_state_dict': model.state_dict(),
-            'optimizer_state_dict': optimizer.state_dict(),
-            'train_loss': train_loss,
-            'val_loss': val_loss,
-            'val_iou': val_iou,
-        }, epoch_save_path)
+        # epoch_save_path = os.path.join(history_save_path, f"checkpoint_epoch_{epoch+1}.pth")
+        # os.makedirs(os.path.dirname(epoch_save_path), exist_ok=True)  # Ensure directory exists
+        # torch.save({
+        #     'epoch': epoch + 1,
+        #     'model_state_dict': model.state_dict(),
+        #     'optimizer_state_dict': optimizer.state_dict(),
+        #     'train_loss': train_loss,
+        #     'val_loss': val_loss,
+        #     'val_iou': val_iou,
+        # }, epoch_save_path)
         
         # Save the best model based on validation IoU
         if val_loss < best_val_loss:
@@ -303,107 +303,6 @@ def train_model_npy(
                 'val_loss': val_loss,
             }, best_model_path)
 
-
-def visualize_predictions(model, dataset, device, num_samples=3, save_path=None):
-    """
-    Visualize model predictions on a few samples.
-    
-    Args:
-        model (nn.Module): Trained model
-        dataset (Dataset): Dataset to sample from
-        device (torch.device): Device to run the model on
-        num_samples (int): Number of samples to visualize
-        save_path (str, optional): Path to save the visualization
-    """
-    # Get a few random samples
-    indices = [674, 520, 611]
-    plt.figure(figsize=(15, 5 * num_samples))
-    
-    for i, idx in enumerate(indices):
-        image, mask = dataset[idx]
-        
-        # Make prediction
-        pred = torch.sigmoid(model(image.unsqueeze(0).to(device))).squeeze().detach().cpu().numpy()
-        
-        # Denormalize image if needed
-        if isinstance(image, torch.Tensor):
-            # Assuming normalization with ImageNet mean and std
-            image = image.cpu().numpy().transpose(1, 2, 0)
-            image = image * np.array([0.229, 0.224, 0.225]) + np.array([0.485, 0.456, 0.406])
-            image = np.clip(image, 0, 1)
-        
-        # Convert mask to numpy array if needed
-        if isinstance(mask, torch.Tensor):
-            mask = mask.squeeze().cpu().numpy()
-        
-        # Calculate IoU
-        iou = calculate_iou(pred, mask)
-        
-        # Plot image, ground truth, and prediction
-        plt.subplot(num_samples, 3, i * 3 + 1)
-        plt.imshow(image)
-        plt.title(f"Sample {idx}")
-        plt.axis('off')
-        
-        plt.subplot(num_samples, 3, i * 3 + 2)
-        plt.imshow(mask, cmap='gray')
-        plt.title("Ground Truth")
-        plt.axis('off')
-        
-        plt.subplot(num_samples, 3, i * 3 + 3)
-        plt.imshow(pred, cmap='gray')
-        plt.title(f"Prediction (IoU: {iou:.4f})")
-        plt.axis('off')
-    
-    plt.tight_layout()
-    
-    if save_path:
-        plt.savefig(save_path)
-    
-    plt.show()
-
-# -------------------------------
-# Model Checkpoint Functions
-# -------------------------------
-def load_checkpoint(filepath, map_location):
-    """
-    Load a checkpoint without file locking.
-    
-    Args:
-        filepath (str): Path to the checkpoint.
-        map_location (torch.device): Device to map the checkpoint.
-        
-    Returns:
-        dict: Loaded checkpoint state.
-    """
-    try:
-        checkpoint = torch.load(filepath, map_location=map_location)
-        print(f"Checkpoint loaded from {filepath}")
-        return checkpoint
-    except Exception as e:
-        print(f"Error loading checkpoint from {filepath}: {str(e)}")
-        return None
-
-def load_model_if_exists(model, model_path, device):
-    try:
-        if os.path.exists(model_path):
-            print(f"Loading model from {model_path}")
-            checkpoint = load_checkpoint(model_path, map_location=device)
-            if checkpoint:
-                model = model.to(device)  # Ensure model is on device before loading weights
-                model.load_state_dict(checkpoint['model_state_dict'])
-                print(f"Model loaded successfully (epoch {checkpoint.get('epoch', 'unknown')})")
-                return model, True, checkpoint  # Return checkpoint as well
-            else:
-                print(f"Failed to load model from {model_path}")
-                return model, False, None
-        else:
-            print(f"No model found at {model_path}")
-            return model, False, None
-    except Exception as e:
-        print(f"Error loading model: {str(e)}")
-        return model, False, None
-
 def train_model_if_disrupt(
     data_path: str,
     model: nn.Module,
@@ -474,7 +373,7 @@ if __name__ == "__main__":
     # Define model parameters
     in_channels = 3  # Number of input channels (e.g., RGB image)
     out_channels = 1  # Number of output channels (e.g., binary segmentation)
-    model = UNet(in_channels=3, out_channels=1) 
+    model = UNet_CBAM(in_channels=3, out_channels=1) 
     # 初始化参数解析器
     parser = argparse.ArgumentParser(description="训练 U-Net 模型")
 
@@ -491,72 +390,72 @@ if __name__ == "__main__":
     train_model(data_path,model, device, args.epochs,args.batchsize, args.lr, args.val_percent, args.startepoch, history_save_path_gf, in_channels, out_channels)
     # Define paths for saving history
     #history_save_path = os.path.join(data_path, "output", "unet_model.pth")
-    history_save_path_s2= os.path.join(data_path, "S2output")
+    # history_save_path_s2= os.path.join(data_path, "S2output")
     
-    # Train the model
-    # 加载预训练模型
-    pretrained_model_path =PRETRAINED_MODEL_DIR  # 替换为你的预训练模型路径
-    #"D:\学术相关\毕设参考\Pytorch-UNet-master\my-unet\\best_model_pixel2560.pth"  # 替换为你的预训练模型路径
-    #checkpointpath="E:\Thesis2025\\all_clip_256\\filter2560\\output\\unet_model_finetuned.pth\\checkpoint_epoch_50.pth"
-    #checkpointpath="E:\Thesis2025\\all_clip_256\\filter2560\\output\\unet_model_finetuned.pth\\best_model.pth"
-    #pretrained_model_path = "E:\\Thesis2025\\SWED\\SWED\\train\\output\\unet_model_finetuned.pth\\checkpoint_epoch_23.pth"
-    #model = UNet(in_channels=3, out_channels=1)  # 假设输入为3通道，输出为1通道（如二分类任务）
-    model, loaded,checkpoint = load_model_if_exists(model,  pretrained_model_path , device)
+    # # Train the model
+    # # 加载预训练模型
+    # pretrained_model_path =PRETRAINED_MODEL_DIR  # 替换为你的预训练模型路径
+    # #"D:\学术相关\毕设参考\Pytorch-UNet-master\my-unet\\best_model_pixel2560.pth"  # 替换为你的预训练模型路径
+    # #checkpointpath="E:\Thesis2025\\all_clip_256\\filter2560\\output\\unet_model_finetuned.pth\\checkpoint_epoch_50.pth"
+    # #checkpointpath="E:\Thesis2025\\all_clip_256\\filter2560\\output\\unet_model_finetuned.pth\\best_model.pth"
+    # #pretrained_model_path = "E:\\Thesis2025\\SWED\\SWED\\train\\output\\unet_model_finetuned.pth\\checkpoint_epoch_23.pth"
+    # #model = UNet(in_channels=3, out_channels=1)  # 假设输入为3通道，输出为1通道（如二分类任务）
+    # model, loaded,checkpoint = load_model_if_exists(model,  pretrained_model_path , device)
 
-    if loaded:
-        print("预训练模型加载成功！")
-    else:
-        print("未能加载预训练模型，使用随机初始化的模型。")
-    #冻结吧，基本的水体特征应该没啥问题
+    # if loaded:
+    #     print("预训练模型加载成功！")
+    # else:
+    #     print("未能加载预训练模型，使用随机初始化的模型。")
+    # #冻结吧，基本的水体特征应该没啥问题
 
-    # 冻结编码器部分（可选）
+    # # 冻结编码器部分（可选）
    
 
-    # 定义新的优化器和损失函数
-    criterion = nn.BCEWithLogitsLoss()
-    optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=5e-06)
+    # # 定义新的优化器和损失函数
+    # criterion = nn.BCEWithLogitsLoss()
+    # optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=5e-06)
 
    
-    # 微调模型
+    # # 微调模型
     
     
-    print("冻结解码器训练开始")
-    for param in model.decoder1.parameters():
-        param.requires_grad = False
-    for param in model.decoder2.parameters():
-        param.requires_grad = False
-    for param in model.decoder3.parameters():
-        param.requires_grad = False
-    for param in model.decoder4.parameters():
-        param.requires_grad = False
+    # print("冻结解码器训练开始")
+    # for param in model.decoder1.parameters():
+    #     param.requires_grad = False
+    # for param in model.decoder2.parameters():
+    #     param.requires_grad = False
+    # for param in model.decoder3.parameters():
+    #     param.requires_grad = False
+    # for param in model.decoder4.parameters():
+    #     param.requires_grad = False
 
-    # Train for the first few epochs with frozen decoder
-    # data_path: str,
-    # model: nn.Module,
-    # device: torch.device,
-    # epochs: int = 20,
-    # batch_size: int = 1,
-    # learning_rate: float = 1e-6,
-    # val_percent: float = 0.2,
-    # start_epoch:int=0,
-    # history_save_path:str="",
-    # in_channels:int=3,
-    # out_channels:int=1,
-    train_model_npy(data_path,model, device, 12, 8, 5e-6, 0.2, 0, history_save_path_s2, in_channels, out_channels)
+    # # Train for the first few epochs with frozen decoder
+    # # data_path: str,
+    # # model: nn.Module,
+    # # device: torch.device,
+    # # epochs: int = 20,
+    # # batch_size: int = 1,
+    # # learning_rate: float = 1e-6,
+    # # val_percent: float = 0.2,
+    # # start_epoch:int=0,
+    # # history_save_path:str="",
+    # # in_channels:int=3,
+    # # out_channels:int=1,
+    # train_model_npy(data_path,model, device, 12, 8, 5e-6, 0.2, 0, history_save_path_s2, in_channels, out_channels)
 
-    # Unfreeze the decoder layers for the remaining epochs
-    print("Unfreezing decoder layers for further training.")
-    for param in model.decoder1.parameters():
-        param.requires_grad = True
-    for param in model.decoder2.parameters():
-        param.requires_grad = True
-    for param in model.decoder3.parameters():
-        param.requires_grad = True
-    for param in model.decoder4.parameters():
-        param.requires_grad = True
+    # # Unfreeze the decoder layers for the remaining epochs
+    # print("Unfreezing decoder layers for further training.")
+    # for param in model.decoder1.parameters():
+    #     param.requires_grad = True
+    # for param in model.decoder2.parameters():
+    #     param.requires_grad = True
+    # for param in model.decoder3.parameters():
+    #     param.requires_grad = True
+    # for param in model.decoder4.parameters():
+    #     param.requires_grad = True
 
-    # Train for the remaining epochs with unfrozen decoder
-    train_model_npy(data_path,model, device, 30, 8, 1e-6, 0.2, 35, history_save_path_s2, in_channels, out_channels)
+    # # Train for the remaining epochs with unfrozen decoder
+    # train_model_npy(data_path,model, device, 30, 8, 1e-6, 0.2, 35, history_save_path_s2, in_channels, out_channels)
 
     # Combine the training history
     print("Training completed.")
